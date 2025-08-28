@@ -51,7 +51,7 @@ sqlcmd -S localhost,1433 -U sa -P 'YourStrong!Passw0rd' -Q "IF DB_ID('ChecklistD
 ## 3) Migrar e subir a API
 
 ```bash
-cd checklist/Checklist.Api
+cd api/Checklist.Api
 dotnet restore
 DOTNET_ENVIRONMENT=Development dotnet ef database update
 DOTNET_ENVIRONMENT=Development dotnet run
@@ -93,7 +93,7 @@ curl http://localhost:5095/api/checklists/templates/<TEMPLATE_ID>/items | jq
 ## 5) Rodar a UI
 
 ```bash
-cd ../../checklist-ui
+cd ui/
 npm install
 ng serve --open
 ```

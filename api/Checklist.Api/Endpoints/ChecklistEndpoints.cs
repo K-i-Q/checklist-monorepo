@@ -195,12 +195,34 @@ public static class ChecklistEndpoints
             return Results.Ok();
         });
 
+        grp.MapGet("/users", async (ChecklistDbContext db) =>
+        await db.Users
+            .OrderBy(u => u.Role)
+            .ThenBy(u => u.Name)
+            .Select(u => new { u.Id, u.Name, role = u.Role.ToString() })
+            .ToListAsync());
+
+        grp.MapGet("/executions/active", async (Guid vehicleId, DateOnly date, ChecklistDbContext db) =>
+        {
+            var active = await db.Executions
+                .Where(e => e.VehicleId == vehicleId
+                        && e.ReferenceDate == date
+                        && (e.Status == ExecutionStatus.Draft || e.Status == ExecutionStatus.InProgress))
+                .Select(e => new { e.Id })
+                .FirstOrDefaultAsync();
+
+            return active is null ? Results.NotFound() : Results.Ok(active);
+        });
+
         grp.MapPost("/executions/{id:guid}/approve",
         async (Guid id, ApproveRequest req, ChecklistDbContext db, HttpRequest http) =>
         {
             var (userId, role) = GetUser(http);
             if (!string.Equals(role, "Supervisor", StringComparison.OrdinalIgnoreCase))
-                return Results.Forbid();
+                return Results.Problem(
+                    "Somente Supervisor pode aprovar/reprovar.",
+                    statusCode: 403
+                );
 
             var exec = await db.Executions.FirstOrDefaultAsync(e => e.Id == id);
             if (exec is null) return Results.NotFound();

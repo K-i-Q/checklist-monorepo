@@ -3,7 +3,7 @@
   <div class="container-narrow py-10">
 
     <!-- Cabeçalho -->
-    <header class="mb-6 flex items-start justify-between">
+    <header class="mb-6 flex items-start justify-between gap-4">
       <div>
         <h1 class="text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
           Checklist
@@ -12,7 +12,28 @@
           Crie, preencha e aprove execuções de checklist.
         </p>
       </div>
-      <app-theme-toggle></app-theme-toggle>
+
+      <div class="flex items-center gap-3">
+        <!-- seletor de usuário -->
+        <div class="text-right">
+          <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Perfil</label>
+          <select
+            class="select"
+            [ngModel]="auth.user()?.id || ''"
+            (ngModelChange)="onPickUser($event)"
+          >
+            <option value="" disabled>Selecione...</option>
+            <option *ngFor="let u of users()" [value]="u.id">
+              {{ u.name }} — {{ u.role }}
+            </option>
+          </select>
+          <div class="mt-1 text-xs text-slate-500 dark:text-slate-400" *ngIf="auth.user() as u">
+            Usando: <span class="font-medium">{{ u.name }}</span> ({{ u.role }})
+          </div>
+        </div>
+
+        <app-theme-toggle></app-theme-toggle>
+      </div>
     </header>
 
     <!-- mensagens -->
@@ -117,7 +138,9 @@
         </div>
 
         <div class="flex flex-wrap gap-3">
-          <button (click)="start()"  [disabled]="ex.status !== 0 || starting()" class="btn-primary disabled:opacity-40">
+          <button (click)="start()"
+                  [disabled]="!auth.user() || ex.status !== 0 || starting()"
+                  class="btn-primary disabled:opacity-40">
             <svg *ngIf="starting()" class="mr-1 h-4 w-4 animate-spin" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
@@ -125,7 +148,8 @@
             <span>Iniciar</span>
           </button>
 
-          <button (click)="submit()" [disabled]="ex.status !== 1 || submitting()"
+          <button (click)="submit()"
+                  [disabled]="!auth.user() || ex.status !== 1 || submitting()"
                   class="btn btn-ghost bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20 disabled:opacity-40">
             <svg *ngIf="submitting()" class="mr-1 h-4 w-4 animate-spin" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
@@ -134,21 +158,28 @@
             <span>Enviar para aprovação</span>
           </button>
 
-          <button (click)="approve(0)" [disabled]="ex.status !== 2 || approving()===0" class="btn-success disabled:opacity-40">
-            <svg *ngIf="approving()===0" class="mr-1 h-4 w-4 animate-spin" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-            </svg>
-            <span>Aprovar</span>
-          </button>
+          <!-- Aprovar/Reprovar visíveis apenas para Supervisor -->
+          <ng-container *ngIf="isSupervisor()">
+            <button (click)="approve(0)"
+                    [disabled]="ex.status !== 2 || approving()===0"
+                    class="btn-success disabled:opacity-40">
+              <svg *ngIf="approving()===0" class="mr-1 h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <span>Aprovar</span>
+            </button>
 
-          <button (click)="approve(1)" [disabled]="ex.status !== 2 || approving()===1" class="btn-danger disabled:opacity-40">
-            <svg *ngIf="approving()===1" class="mr-1 h-4 w-4 animate-spin" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-            </svg>
-            <span>Reprovar</span>
-          </button>
+            <button (click)="approve(1)"
+                    [disabled]="ex.status !== 2 || approving()===1"
+                    class="btn-danger disabled:opacity-40">
+              <svg *ngIf="approving()===1" class="mr-1 h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <span>Reprovar</span>
+            </button>
+          </ng-container>
         </div>
 
         <div>
@@ -177,19 +208,19 @@
               <div class="mt-3">
                 <label class="text-xs text-slate-600 dark:text-slate-400">Observação</label>
                 <input #mobObs [value]="it.observation || ''"
-                       [disabled]="ex.status !== 1 || patchingId()===it.templateItemId"
+                       [disabled]="!auth.user() || ex.status !== 1 || patchingId()===it.templateItemId"
                        class="input mt-1" />
               </div>
 
               <div class="mt-3 flex gap-2">
                 <button (click)="patch(it.templateItemId, 0, mobObs.value)"
-                        [disabled]="ex.status !== 1 || patchingId()===it.templateItemId"
+                        [disabled]="!auth.user() || ex.status !== 1 || patchingId()===it.templateItemId"
                         class="btn-success disabled:opacity-40">OK</button>
                 <button (click)="patch(it.templateItemId, 1, mobObs.value)"
-                        [disabled]="ex.status !== 1 || patchingId()===it.templateItemId"
+                        [disabled]="!auth.user() || ex.status !== 1 || patchingId()===it.templateItemId"
                         class="btn-danger disabled:opacity-40">NOK</button>
                 <button (click)="patch(it.templateItemId, 2, mobObs.value)"
-                        [disabled]="ex.status !== 1 || patchingId()===it.templateItemId"
+                        [disabled]="!auth.user() || ex.status !== 1 || patchingId()===it.templateItemId"
                         class="btn-ghost disabled:opacity-40">N/A</button>
               </div>
 
@@ -233,14 +264,14 @@
 
                   <td class="td">
                     <input #obs [value]="it.observation || ''"
-                           [disabled]="ex.status !== 1 || patchingId()===it.templateItemId"
+                           [disabled]="!auth.user() || ex.status !== 1 || patchingId()===it.templateItemId"
                            class="input" />
                   </td>
 
                   <td class="td">
                     <div class="flex gap-2">
                       <button (click)="patch(it.templateItemId, 0, obs.value)"
-                              [disabled]="ex.status !== 1 || patchingId()===it.templateItemId"
+                              [disabled]="!auth.user() || ex.status !== 1 || patchingId()===it.templateItemId"
                               class="btn-success disabled:opacity-40">
                         <svg *ngIf="patchingId()===it.templateItemId" class="mr-1 h-4 w-4 animate-spin" viewBox="0 0 24 24">
                           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
@@ -249,10 +280,10 @@
                         <span>OK</span>
                       </button>
                       <button (click)="patch(it.templateItemId, 1, obs.value)"
-                              [disabled]="ex.status !== 1 || patchingId()===it.templateItemId"
+                              [disabled]="!auth.user() || ex.status !== 1 || patchingId()===it.templateItemId"
                               class="btn-danger disabled:opacity-40">NOK</button>
                       <button (click)="patch(it.templateItemId, 2, obs.value)"
-                              [disabled]="ex.status !== 1 || patchingId()===it.templateItemId"
+                              [disabled]="!auth.user() || ex.status !== 1 || patchingId()===it.templateItemId"
                               class="btn-ghost disabled:opacity-40">N/A</button>
                     </div>
                   </td>

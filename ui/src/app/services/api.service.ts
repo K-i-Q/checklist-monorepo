@@ -39,11 +39,22 @@ export interface Execution {
   items: ExecutionItem[];
 }
 
+export type UserRole = 'Executor' | 'Supervisor';
+export interface User {
+  id: string;
+  name: string;
+  role: UserRole;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private base = 'http://localhost:5095/api/checklists';
 
   constructor(private http: HttpClient) {}
+
+  getUsers(): Observable<User[]> {
+    return this.http.get<User[]>(`${this.base}/users`);
+  }
 
   getVehicles(): Observable<Vehicle[]> {
     return this.http.get<Vehicle[]>(`${this.base}/vehicles`);
@@ -55,6 +66,7 @@ export class ApiService {
     return this.http.get<TemplateItem[]>(`${this.base}/templates/${templateId}/items`);
   }
 
+  // --- executions ---
   createExecution(payload: {
     templateId: string;
     vehicleId: string;
@@ -74,23 +86,16 @@ export class ApiService {
   patchItem(
     executionId: string,
     templateItemId: string,
-    body: { status: number; observation?: string | null; rowVersion: string },
-    _userId?: string
+    body: { status: number; observation?: string | null; rowVersion: string }
   ) {
     return this.http.patch(`${this.base}/executions/${executionId}/items/${templateItemId}`, body);
   }
 
-  submitExecution(id: string, rowVersion: string, _userId?: string) {
+  submitExecution(id: string, rowVersion: string) {
     return this.http.post(`${this.base}/executions/${id}/submit`, { rowVersion });
   }
 
-  approveExecution(
-    id: string,
-    decision: 0 | 1,
-    notes: string | null,
-    rowVersion: string,
-    _supervisorId?: string
-  ) {
+  approveExecution(id: string, decision: 0 | 1, notes: string | null, rowVersion: string) {
     return this.http.post(`${this.base}/executions/${id}/approve`, {
       decision,
       notes,

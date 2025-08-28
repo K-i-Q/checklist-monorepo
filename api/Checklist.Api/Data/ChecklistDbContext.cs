@@ -15,6 +15,9 @@ public sealed class ChecklistDbContext : DbContext
     public DbSet<ChecklistExecutionItem> ExecutionItems => Set<ChecklistExecutionItem>();
     public DbSet<Approval> Approvals => Set<Approval>();
 
+    // NOVO: usuários (Executor 1, Executor 2, Supervisor)
+    public DbSet<User> Users => Set<User>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<Vehicle>()
@@ -52,6 +55,27 @@ public sealed class ChecklistDbContext : DbContext
           .HasFilter("[Status] IN (0,1)")
           .IsUnique()
           .HasDatabaseName("UX_ActiveExecution_Vehicle_Date");
+
+        b.Entity<User>().HasData(
+            new User
+            {
+                Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                Name = "Executor 1",
+                Role = UserRole.Executor
+            },
+            new User
+            {
+                Id = Guid.Parse("33333333-3333-3333-3333-333333333333"),
+                Name = "Executor 2",
+                Role = UserRole.Executor
+            },
+            new User
+            {
+                Id = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                Name = "Supervisor",
+                Role = UserRole.Supervisor
+            }
+        );
 
         base.OnModelCreating(b);
     }

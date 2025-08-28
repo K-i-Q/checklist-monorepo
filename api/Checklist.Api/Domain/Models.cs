@@ -65,3 +65,12 @@ public sealed class Approval
     public string? Notes { get; set; }
     public DateTimeOffset DecidedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+public enum UserRole { Executor = 0, Supervisor = 1 }
+
+public sealed class User
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public UserRole Role { get; set; }
+}
