@@ -145,7 +145,7 @@ Logs verbosos do SQL Server continuam no container do banco; os da aplicação f
 
 ## Cenários de teste (recomendados)
 
-> Cada cenário tem passos via **UI** (recomendado) e **cURL opcional**. Na UI, use o seletor **Perfil** (canto superior) para alternar entre **Executor 1**, **Executor 2** e **Supervisor**. **Nos exemplos de cURL use aspas simples** no corpo (`-d '...'`) para evitar erros de shell.
+> Cada cenário tem passos via **UI** (recomendado) e **cURL opcional**. Na UI, use o seletor **Perfil** (canto superior) para alternar entre **Executor 1**, **Executor 2** e **Supervisor**. Nos exemplos de `curl`, **use aspas simples** no corpo (`-d '...'`).
 
 ### 1) Exclusividade — **1 execução ativa por Veículo + Data**
 
@@ -177,14 +177,19 @@ curl -s 'http://localhost:5095/api/checklists/executions/active?vehicleId=<VEH_I
 
 ### 2) Concorrência Otimista — **Item (rowversion por item)**
 
-**Objetivo:** editar o mesmo item em 2 abas; só a 1ª grava, a 2ª recebe `409` e recarrega.
+**Objetivo:** editar o mesmo item em 2 abas; só a 1ª grava, a 2ª recebe `409` e recarrega **quando tentar gravar algo diferente do que já está salvo**.
 
 **UI**
 
 1. Abra **duas abas** na mesma execução **InProgress**.
-2. Na Aba 1, marque um item obrigatório como **OK**.
-3. Na Aba 2, sem recarregar, mude o **mesmo item**.\
-   **Esperado:** toast de conflito e recarregamento automático.
+2. Na **Aba 1**, marque um item obrigatório como **OK** (ou altere a observação).
+3. Na **Aba 2**, **sem recarregar**, tente mudar o **mesmo item**.
+   - **Esperado:** toast de **conflito** e **recarregamento** automático **se houver mudança real** com `rowVersion` antigo.
+
+> **Nota (idempotência x conflito):**
+>
+> - Se a 2ª aba enviar **exatamente os mesmos valores** que já estão no banco (ex.: status **OK → OK** novamente e **sem alterar a observação**), a API detecta **no‑op** e responde `204 No Content` (sem `409`). **Nada é alterado** e o `rowVersion` **não** é incrementado — isto é **intencional** para evitar conflitos desnecessários.
+> - Para **forçar o **``, a 2ª aba deve enviar **alguma mudança real** (ex.: **OK ↔ NOK** **ou** alterar a **observação**) ainda com o `rowVersion`antigo. A UI trata o`409` e recarrega a execução.
 
 **cURL**
 
@@ -192,13 +197,13 @@ curl -s 'http://localhost:5095/api/checklists/executions/active?vehicleId=<VEH_I
 # capture rowVersion dos itens
 curl -s http://localhost:5095/api/checklists/executions/<EXEC_ID> | jq '.items[] | {templateItemId, rowVersion}'
 
-# PATCH usando um rowVersion antigo (deve falhar)
+# PATCH com rowVersion antigo e **mudança real** (deve falhar com 409)
 curl -i -X PATCH \
   http://localhost:5095/api/checklists/executions/<EXEC_ID>/items/<TEMPLATE_ITEM_ID> \
   -H 'Content-Type: application/json' \
   -H 'X-User-Id: 11111111-1111-1111-1111-111111111111' \
   -H 'X-User-Role: Executor' \
-  -d '{"status":0, "observation":"OK", "rowVersion":"<ROWVERSION_ANTIGO>"}'
+  -d '{"status":1, "observation":"Exemplo de alteração", "rowVersion":"<ROWVERSION_ANTIGO>"}'
 ```
 
 ---
@@ -260,7 +265,7 @@ curl -i -X POST http://localhost:5095/api/checklists/executions/<EXEC_ID>/approv
 
 1. Como **Executor 1**, clique **Iniciar**.
 2. Troque o Perfil para **Executor 2** e tente **Iniciar** a mesma execução.\
-   **Esperado:** `409` com mensagem _Já iniciado por outro executor_.
+   **Esperado:** `409` com mensagem _Já iniciado por outro executor._
 
 **cURL**
 
@@ -322,17 +327,17 @@ GET  /api/checklists/vehicles
 GET  /api/checklists/templates
 GET  /api/checklists/templates/{templateId}/items
 
-POST /api/checklists/executions                               { templateId, vehicleId, referenceDate }
+POST /api/checklists/executions                            { templateId, vehicleId, referenceDate }
 GET  /api/checklists/executions/active?vehicleId=&date=
 GET  /api/checklists/executions/{id}
-POST /api/checklists/executions/{id}/start                    { executorId }
-PATCH /api/checklists/executions/{id}/items/{templateItemId}  { status, observation, rowVersion }
-POST /api/checklists/executions/{id}/submit                   { rowVersion }
-POST /api/checklists/executions/{id}/approve                  { decision, notes, rowVersion }
+POST /api/checklists/executions/{id}/start                 { executorId }
+PATCH /api/checklists/executions/{id}/items/{templateItemId} { status, observation, rowVersion }
+POST /api/checklists/executions/{id}/submit                { rowVersion }
+POST /api/checklists/executions/{id}/approve               { decision, notes, rowVersion }
 GET  /api/checklists/users
 ```
 
-> **Cabeçalhos de papel (para cURL):** inclua `X-User-Id` e `X-User-Role` (Executor/Supervisor). Na UI isso é automático pelo seletor de Perfil.
+> **Cabeçalhos de papel (quando fizer cURL):** inclua `X-User-Id` e `X-User-Role` (Executor/Supervisor). Na UI isso é automático pelo seletor de Perfil.
 
 ---
 
@@ -341,28 +346,14 @@ GET  /api/checklists/users
 - Exclusividade `(VehicleId, ReferenceDate)` enquanto `Status ∈ {Draft, InProgress}`.
 - Regras de obrigatoriedade (não enviar com N/A obrigatório).
 - Concorrência otimista: `409` dispara **recarregar** no front.
-- Aprovação registra trilha em `Approvals` (1 decisão por execução).
+- Aprovação registra trilha em `Approvals`.
 - UX consistente em dark/light e mobile‑first.
 
 ---
 
 ## 🧹 Reset / limpeza rápida
 
-**Opção A — via Make (recomendado)**
-
-```bash
-make reset   # para containers e remove volumes (zera o banco)
-make first   # sobe novamente aplicando migrations + seed idempotente
-```
-
-**Opção B — via Docker Compose**
-
-```bash
-docker compose down -v          # para e remove volumes
-docker compose up -d --build    # sobe novamente
-```
-
-**Opção C — SQL “na unha” (apagar execuções do dia)**
+**Zerar execuções do dia para um veículo (SQL):**
 
 ```sql
 DELETE FROM Approvals WHERE ExecutionId IN (
@@ -374,11 +365,19 @@ DELETE FROM ExecutionItems WHERE ExecutionId IN (
 DELETE FROM Executions WHERE VehicleId = '<VEH_ID>' AND ReferenceDate = '2025-08-29';
 ```
 
+**Recriar container do SQL Server:**
+
+```bash
+docker rm -f sql2022 && \
+  docker run -e 'ACCEPT_EULA=Y' -e 'MSSQL_SA_PASSWORD=YourStrong!Passw0rd' \
+  -p 1433:1433 --name sql2022 -d --platform linux/amd64 \
+  mcr.microsoft.com/mssql/server:2022-latest
+```
+
 ---
 
 ## 📌 Observações finais
 
 - Em duplicidade (índice único), a UI tenta **carregar** a execução existente automaticamente.
 - Exemplos usam GUIDs/datas fixas para facilitar replays; ajuste conforme necessário.
-- Para auditoria e troubleshooting, veja `make logs` (api/ui) — os logs do SQL continuam acessíveis no container do banco.
-- **Dica:** em cURL, mantenha **aspas simples** no `-d '...'` para não quebrar `!` e caracteres especiais no shell.
+- Para auditoria, acompanhe logs do Kestrel e toasts da UI.
