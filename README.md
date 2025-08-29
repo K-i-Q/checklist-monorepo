@@ -59,8 +59,10 @@ make reset   # para e apaga volumes (zera o banco)
 
 ### URLs
 
-- **API:** [http://localhost:5095](http://localhost:5095)
-- **UI:** [http://localhost:4200](http://localhost:4200)
+- **API:** http://localhost:5095
+- **UI:** http://localhost:4200
+- **Health (API):** http://localhost:5095/health
+- **Swagger (dev):** http://localhost:5095/swagger
 
 > A UI já aponta para `http://api:5095` dentro da rede do compose e expõe em `http://localhost:4200`.
 
@@ -143,6 +145,41 @@ Logs verbosos do SQL Server continuam no container do banco; os da aplicação f
 
 ---
 
+## Testes automatizados (API)
+
+Os testes sobem a API em ambiente **Testing** usando **EF Core InMemory** (sem SQL externo).
+
+```bash
+# na raiz do repo
+ dotnet clean checklist-monorepo.sln
+ dotnet restore checklist-monorepo.sln --no-cache
+ dotnet build   checklist-monorepo.sln -c Debug
+ dotnet test    checklist-monorepo.sln -c Debug
+```
+
+> Cobertura opcional (gera Cobertura XML em `api/Checklist.Api.Tests/coverage/`):
+>
+> ```bash
+> dotnet test api/Checklist.Api.Tests/Checklist.Api.Tests.csproj -c Release \
+>   /p:CollectCoverage=true \
+>   /p:CoverletOutput=../coverage/ \
+>   /p:CoverletOutputFormat=cobertura
+> ```
+
+---
+
+## CI (GitHub Actions)
+
+Pipeline em `.github/workflows/ci.yml` com **restore+build+test** da API e **build** do Angular.
+
+O job executa:
+
+- Restore & build (`Checklist.Api` + `Checklist.Api.Tests`)
+- Testes (`dotnet test` com logs TRX em `./artifacts/tests`)
+- Build da UI (`npm ci && npm run build`)
+
+---
+
 ## Cenários de teste (recomendados)
 
 > Cada cenário tem passos via **UI** (recomendado) e **cURL opcional**. Na UI, use o seletor **Perfil** (canto superior) para alternar entre **Executor 1**, **Executor 2** e **Supervisor**. Nos exemplos de `curl`, **use aspas simples** no corpo (`-d '...'`).
@@ -186,10 +223,10 @@ curl -s 'http://localhost:5095/api/checklists/executions/active?vehicleId=<VEH_I
 3. Na **Aba 2**, **sem recarregar**, tente mudar o **mesmo item**.
    - **Esperado:** toast de **conflito** e **recarregamento** automático **se houver mudança real** com `rowVersion` antigo.
 
-> **Nota (idempotência x conflito):**
+> **Nota (idempotência × conflito):**
 >
 > - Se a 2ª aba enviar **exatamente os mesmos valores** que já estão no banco (ex.: status **OK → OK** novamente e **sem alterar a observação**), a API detecta **no‑op** e responde `204 No Content` (sem `409`). **Nada é alterado** e o `rowVersion` **não** é incrementado — isto é **intencional** para evitar conflitos desnecessários.
-> - Para **forçar o **``, a 2ª aba deve enviar **alguma mudança real** (ex.: **OK ↔ NOK** **ou** alterar a **observação**) ainda com o `rowVersion`antigo. A UI trata o`409` e recarrega a execução.
+> - Para **forçar o conflito (`409`)**, a 2ª aba deve enviar **alguma mudança real** (ex.: **OK ↔ NOK** **ou** alterar a **observação**) ainda com o `rowVersion` antigo. A UI trata o `409` e recarrega a execução.
 
 **cURL**
 
