@@ -1,4 +1,4 @@
-import { Component, signal, OnInit } from '@angular/core';
+import { Component, signal, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -51,6 +51,20 @@ export class ExecutionComponent implements OnInit {
   ngOnInit() {
     this.loadLists();
     this.loadUsers();
+  }
+
+  @ViewChild('detailsSection') detailsSection?: ElementRef<HTMLElement>;
+  private pendingScrollToDetails = false;
+
+  private scrollToDetailsIfMobile() {
+    if (typeof window === 'undefined') return;
+    const isMobile = window.matchMedia?.('(max-width: 768px)').matches ?? window.innerWidth <= 768;
+    if (!isMobile) return;
+
+    this.detailsSection?.nativeElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
   }
 
   private loadUsers() {
@@ -158,6 +172,7 @@ export class ExecutionComponent implements OnInit {
           const id = (resp.body as any)?.id;
           if (id) {
             this.toast.success('Execução criada');
+            this.pendingScrollToDetails = true;
             this.load(id);
           } else {
             this.toast.info('Criado, mas não recebi o ID. Recarregue a página.');
@@ -172,8 +187,10 @@ export class ExecutionComponent implements OnInit {
               this.idFromLocation(e?.headers?.get?.('Location'));
             const id = idFromBody || idFromHeader;
             this.toast.info('Já existe uma execução ativa. Carreguei ela pra você.');
-            if (id) this.load(id);
-            else this.toast.error('Conflito detectado, mas não identifiquei o ID da execução.');
+            if (id) {
+              this.pendingScrollToDetails = true;
+              this.load(id);
+            } else this.toast.error('Conflito detectado, mas não identifiquei o ID da execução.');
             return;
           }
           const msg = this.msgFromErr(e, 'Erro ao criar execução');
@@ -192,6 +209,11 @@ export class ExecutionComponent implements OnInit {
         this.exec.set(ex);
         if (!opts?.silent) this.loadingExec.set(false);
         this.loadTemplateItems(ex.templateId);
+
+        if (this.pendingScrollToDetails) {
+          this.pendingScrollToDetails = false;
+          setTimeout(() => this.scrollToDetailsIfMobile(), 50);
+        }
       },
       error: (e) => {
         if (!opts?.silent) this.loadingExec.set(false);

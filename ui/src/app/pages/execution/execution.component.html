@@ -3,7 +3,7 @@
   <div class="container-narrow py-10">
 
     <!-- Cabeçalho -->
-    <header class="mb-6 flex items-start justify-between gap-4">
+    <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h1 class="text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
           Checklist
@@ -13,12 +13,13 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-3">
-        <!-- seletor de usuário -->
-        <div class="text-right">
-          <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Perfil</label>
+     <!-- seletor + tema: select e toggle na MESMA linha -->
+      <div class="w-full md:w-auto md:text-right">
+        <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Perfil</label>
+
+        <div class="flex items-center gap-2">
           <select
-            class="select"
+            class="select flex-1 md:w-80"
             [ngModel]="auth.user()?.id || ''"
             (ngModelChange)="onPickUser($event)"
           >
@@ -27,12 +28,14 @@
               {{ u.name }} — {{ u.role }}
             </option>
           </select>
-          <div class="mt-1 text-xs text-slate-500 dark:text-slate-400" *ngIf="auth.user() as u">
-            Usando: <span class="font-medium">{{ u.name }}</span> ({{ u.role }})
-          </div>
+
+          <!-- fica centralizado verticalmente ao select -->
+          <app-theme-toggle class="shrink-0"></app-theme-toggle>
         </div>
 
-        <app-theme-toggle></app-theme-toggle>
+        <div class="mt-1 text-xs text-slate-500 dark:text-slate-400" *ngIf="auth.user() as u">
+          Usando: <span class="font-medium">{{ u.name }}</span> ({{ u.role }})
+        </div>
       </div>
     </header>
 
@@ -96,7 +99,7 @@
     </section>
 
     <!-- detalhes -->
-    <section *ngIf="exec() as ex" class="card">
+    <section *ngIf="exec() as ex" class="card" #detailsSection>
       <div class="card-header md:flex md:items-start md:justify-between gap-4">
         <!-- Coluna esquerda: infos -->
         <div class="space-y-1">
