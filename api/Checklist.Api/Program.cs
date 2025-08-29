@@ -1,11 +1,41 @@
 using Checklist.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Checklist.Api.Endpoints;
+using Checklist.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.ClearProviders();
+builder.Logging.AddSimpleConsole(o =>
+{
+    o.SingleLine = true;
+    o.TimestampFormat = "HH:mm:ss ";
+    // o.IncludeScopes = false;       // (opcional) escopos desligados
+});
+
+builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.Hosting", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Error);
+
+var cs =
+    builder.Configuration.GetConnectionString("SqlServer")
+    ?? builder.Configuration.GetConnectionString("Default")
+    ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer")
+    ?? throw new InvalidOperationException("Connection string 'SqlServer' não configurada.");
+
 builder.Services.AddDbContext<ChecklistDbContext>(opts =>
-    opts.UseSqlServer(builder.Configuration.GetConnectionString("SqlServer")));
+    opts.UseSqlServer(cs, sql =>
+    {
+        sql.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(5),
+            errorNumbersToAdd: null);
+    })
+    .EnableDetailedErrors(false)
+    .EnableSensitiveDataLogging(false)
+);
 
 builder.Services.AddCors(o =>
 o.AddPolicy("ng", p => p
@@ -20,34 +50,29 @@ o.AddPolicy("ng", p => p
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<ChecklistDbContext>();
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+await DbSeeder.EnsureSeedAsync(app.Services, app.Logger);
+
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+app.MapHealthChecks("/health");
 
-var summaries = new[]
+if (!app.Environment.IsDevelopment())
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    app.UseHttpsRedirection();
+}
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
 
 app.UseCors("ng");
 
@@ -55,7 +80,3 @@ app.MapChecklistEndpoints();
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

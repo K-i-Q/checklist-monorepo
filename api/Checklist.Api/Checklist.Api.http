@@ -1,6 +1,96 @@
-@Checklist.Api_HostAddress = http://localhost:5095
+@host = http://localhost:5095
+@json = application/json
+@execId = {{EXECUTION_ID}}
+@tplId = {{TEMPLATE_ID}}
+@vehId = {{VEHICLE_ID}}
+@itemId = {{TEMPLATE_ITEM_ID}}
+@rowvExec = {{ROWVERSION_EXEC}}
+@rowvItem = {{ROWVERSION_ITEM}}
 
-GET {{Checklist.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Health
+GET {{host}}/health
 
-###
+### Swagger JSON
+GET {{host}}/swagger/v1/swagger.json
+
+### Listar veículos
+GET {{host}}/api/checklists/vehicles
+
+### Listar templates
+GET {{host}}/api/checklists/templates
+
+### Itens do template
+GET {{host}}/api/checklists/templates/{{tplId}}/items
+
+### Criar execução (defina @tplId, @vehId e data)
+POST {{host}}/api/checklists/executions
+Content-Type: {{json}}
+
+{
+  "templateId": "{{tplId}}",
+  "vehicleId": "{{vehId}}",
+  "referenceDate": "2025-08-29"
+}
+
+### Buscar execução por ID
+GET {{host}}/api/checklists/executions/{{execId}}
+
+### Iniciar execução (executor)
+POST {{host}}/api/checklists/executions/{{execId}}/start
+Content-Type: {{json}}
+
+{
+  "executorId": "11111111-1111-1111-1111-111111111111"
+}
+
+### PATCH item (Executor) — OK
+PATCH {{host}}/api/checklists/executions/{{execId}}/items/{{itemId}}
+Content-Type: {{json}}
+X-User-Id: 11111111-1111-1111-1111-111111111111
+X-User-Role: Executor
+
+{
+  "status": 0,
+  "observation": "OK",
+  "rowVersion": "{{rowvItem}}"
+}
+
+### Submit (Executor)
+POST {{host}}/api/checklists/executions/{{execId}}/submit
+Content-Type: {{json}}
+X-User-Id: 11111111-1111-1111-1111-111111111111
+X-User-Role: Executor
+
+{
+  "rowVersion": "{{rowvExec}}"
+}
+
+### Aprovar (Supervisor)
+POST {{host}}/api/checklists/executions/{{execId}}/approve
+Content-Type: {{json}}
+X-User-Id: 22222222-2222-2222-2222-222222222222
+X-User-Role: Supervisor
+
+{
+  "decision": 0,
+  "notes": "Tudo certo",
+  "rowVersion": "{{rowvExec}}"
+}
+
+### Reprovar (Supervisor)
+POST {{host}}/api/checklists/executions/{{execId}}/approve
+Content-Type: {{json}}
+X-User-Id: 22222222-2222-2222-2222-222222222222
+X-User-Role: Supervisor
+
+{
+  "decision": 1,
+  "notes": "Ajustar itens",
+  "rowVersion": "{{rowvExec}}"
+}
+
+### Consultar execução ativa (veículo + data)
+GET {{host}}/api/checklists/executions/active?vehicleId={{vehId}}&date=2025-08-29
+
+### Listar usuários (perfil)
+GET {{host}}/api/checklists/users
