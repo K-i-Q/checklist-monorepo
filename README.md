@@ -1,10 +1,10 @@
-# Checklist (Back + Front) — Quickstart + Seed
+# Checklist (Back + Front) — Quickstart com Make/Compose + Seed
 
-Guia **objetivo** para rodar localmente (API .NET + UI Angular) em monorepo, com **seed** inicial. Abra **dois terminais na raiz** do repositório: um para a API e outro para a UI.
+Guia **objetivo** para rodar localmente (API .NET + UI Angular) em monorepo, agora com **Docker Compose** e **Makefile**. A **primeira subida** aplica migrations e faz **seed idempotente** (cria usuários + 1 veículo + 1 template com 3 itens).
 
 ## Stack
 
-- **API:** .NET 9, EF Core, SQL Server (Docker), concorrência otimista com `rowversion`
+- **API:** .NET 9, EF Core, SQL Server (container Docker), concorrência otimista com `rowversion`
 - **UI:** Angular 18+, Tailwind, tema claro/escuro (persistido)
 
 ## Estrutura do repo
@@ -12,8 +12,10 @@ Guia **objetivo** para rodar localmente (API .NET + UI Angular) em monorepo, com
 ```
 / (raiz)
 ├─ api/
-│  └─ Checklist.Api/           # Backend (.NET)
-└─ ui/                          # Frontend (Angular)
+│  └─ Checklist.Api/              # Backend (.NET)
+├─ ui/                            # Frontend (Angular)
+├─ docker-compose.yml             # orquestra SQL + API + UI
+└─ Makefile                       # atalhos de up/start/logs/reset
 ```
 
 ## Pré‑requisitos
@@ -21,113 +23,129 @@ Guia **objetivo** para rodar localmente (API .NET + UI Angular) em monorepo, com
 - **Docker Desktop** ativo
 - **.NET SDK 9** → `dotnet --info`
 - **Node 20/22+** → `node -v` (Angular CLI opcional: `npm i -g @angular/cli`)
-- **sqlcmd** (macOS: `brew install sqlcmd`)
 
-> Dica: com o projeto aberto no editor, use **Terminal A** p/ API e **Terminal B** p/ UI, sempre partindo da **raiz** do repo.
-
----
-
-## 1) SQL Server via Docker (macOS/Linux)
-
-> **Use aspas simples na senha** para evitar problemas com `!` no zsh/bash.
-
-```bash
-docker run \
-  -e ACCEPT_EULA=Y \
-  -e MSSQL_SA_PASSWORD='YourStrong!Passw0rd' \
-  -p 1433:1433 --name sql2022 \
-  -d mcr.microsoft.com/mssql/server:2022-latest
-```
-
-Teste a conexão:
-
-```bash
-sqlcmd -S localhost,1433 -U sa -P 'YourStrong!Passw0rd' -Q "SELECT @@VERSION;"
-```
-
-## 2) Criar a base
-
-```bash
-sqlcmd -S localhost,1433 -U sa -P 'YourStrong!Passw0rd' -Q "IF DB_ID('ChecklistDb') IS NULL BEGIN CREATE DATABASE ChecklistDb; END;"
-```
-
-## 3) Migrar e subir a API
-
-**Terminal A (na raiz):**
-
-```bash
-cd api/Checklist.Api
-dotnet restore
-DOTNET_ENVIRONMENT=Development dotnet ef database update
-DOTNET_ENVIRONMENT=Development dotnet run
-```
-
-API disponível em **[http://localhost:5095](http://localhost:5095)**.
-
-## 4) Seed mínimo (veículo + template + itens)
-
-> Escolha **uma** das opções abaixo.
-
-### Opção A — SQL direto
-
-```bash
-sqlcmd -S localhost,1433 -U sa -P 'YourStrong!Passw0rd' -d ChecklistDb -Q "
-DECLARE @veh UNIQUEIDENTIFIER=NEWID(), @tpl UNIQUEIDENTIFIER=NEWID();
-INSERT INTO Vehicles(Id,Plate,Model) VALUES(@veh,'ABC1D23','Sprinter');
-INSERT INTO Templates(Id,Name) VALUES(@tpl,N'Saída padrão');
-INSERT INTO TemplateItems(Id,TemplateId,Label,[Order],Required) VALUES
-(NEWID(),@tpl,N'Pneus calibrados',1,1),
-(NEWID(),@tpl,N'Faróis funcionando',2,1),
-(NEWID(),@tpl,N'Kit de emergência',3,0);
-SELECT @veh AS VehicleId, @tpl AS TemplateId;"
-```
-
-Anote `VehicleId` e `TemplateId` (a UI também lista via API).
-
-### Opção B — via API (curl)
-
-```bash
-# listar veículos
-curl http://localhost:5095/api/checklists/vehicles | jq
-# listar templates
-curl http://localhost:5095/api/checklists/templates | jq
-# listar itens de um template
-curl http://localhost:5095/api/checklists/templates/<TEMPLATE_ID>/items | jq
-```
-
-## 5) Rodar a UI
-
-**Terminal B (na raiz):**
-
-```bash
-cd ui
-npm install
-ng serve --open
-```
-
-UI em **[http://localhost:4200](http://localhost:4200)** (consome a API em `http://localhost:5095`).
+> Abra o repositório no seu editor e use os comandos **a partir da raiz**.
 
 ---
 
-## Como usar (fluxo)
+## Subir com Make (recomendado)
 
-1. **Nova execução**: selecione Template, Veículo e (opcional) **Data de referência**.
-2. **Criar execução** → **Iniciar**.
-3. Marque itens (OK/NOK/N/A), **Enviar para aprovação** e finalize com **Aprovar/Reprovar**.
-4. Use o botão de **Tema** para alternar claro/escuro.
+### Primeira vez (zera, sobe e mostra logs)
+
+```bash
+make first
+```
+
+O que acontece:
+
+- Derruba containers/volumes anteriores (zera o banco)
+- `` para SQL (`sql2022`), API e UI
+- Segue logs somente de **api** e **ui** (mais “limpos”)
+- A API aplica **migrations** e roda **seed idempotente**
+
+### Próximas vezes
+
+```bash
+make start   # sobe em segundo plano (sem rebuild)
+make logs    # segue logs da api/ui
+```
+
+### Parar / Resetar
+
+```bash
+make stop    # para containers (mantém dados)
+make reset   # para e apaga volumes (zera o banco)
+```
+
+### URLs
+
+- **API:** [http://localhost:5095](http://localhost:5095)
+- **UI:** [http://localhost:4200](http://localhost:4200)
+
+> A UI já aponta para `http://api:5095` dentro da rede do compose e expõe em `http://localhost:4200`.
 
 ---
 
-## Notas rápidas por SO
+## Subir manualmente (sem Make)
 
-- **macOS/Linux:** comandos acima já prontos (atenção às **aspas simples** na senha `'YourStrong!Passw0rd'`).
-- **Windows (PowerShell):** use `-e "MSSQL_SA_PASSWORD=YourStrong!Passw0rd"` no `docker run` e `-P "YourStrong!Passw0rd"` no `sqlcmd`.
+Se preferir, rode direto com Compose:
+
+```bash
+docker compose up -d --build
+# (opcional) ver logs enxutos
+docker compose logs -f api ui
+```
+
+Ou modo “dev solto” (sem compose):
+
+- **Terminal A**
+  ```bash
+  cd api/Checklist.Api
+  dotnet run
+  ```
+- **Terminal B**
+  ```bash
+  cd ui
+  npm install
+  ng serve --open
+  ```
+
+> Nesse modo, suba um SQL Server por fora (Docker/instalado) e ajuste a connection string.
+
+---
+
+## Configuração / Connection String
+
+A API resolve a connection string **nesta ordem**:
+
+1. `ConnectionStrings:SqlServer` no `appsettings.*.json`
+2. `ConnectionStrings__SqlServer` (variável de ambiente)
+
+No Compose já vem configurado para falar com o container ``. Você pode sobrescrever via **env** sem tocar em código.
+
+---
+
+## Seed idempotente (o que é criado)
+
+Na **primeira subida**, a API aplica migrations e garante os registros (só cria se não existirem):
+
+- **Veículo:** Placa `ABC1D23` — Modelo `Sprinter`
+- **Template:** `Saída padrão` com 3 itens: _Pneus calibrados_ (obrig.), _Faróis funcionando_ (obrig.), _Kit de emergência_ (opcional)
+- **Usuários:**
+  - `Executor 1` — `11111111-1111-1111-1111-111111111111`
+  - `Executor 2` — `33333333-3333-3333-3333-333333333333`
+  - `Supervisor` — `22222222-2222-2222-2222-222222222222`
+
+Se você derrubar com `make reset`, ao subir novamente o seed roda de novo e **continua idempotente**.
+
+---
+
+## Logs mais “limpos”
+
+Na inicialização você verá mensagens resumidas, por exemplo:
+
+- `DB ▸ aplicando migrações…`
+- `DB ▸ verificando seed mínimo…`
+- `DB ✓ seed aplicado (vehicle/template/itens)`
+
+Logs verbosos do SQL Server continuam no container do banco; os da aplicação foram reduzidos.
+
+---
+
+## Como usar (fluxo básico)
+
+1. Na UI, escolha **Perfil** (Executor 1/2 ou Supervisor) no cabeçalho.
+2. **Nova execução**: selecione Template, Veículo e (opcional) **Data de referência**.
+3. **Criar execução** → **Iniciar** (bloqueia a execução para o executor atual).
+4. Marque itens (OK/NOK/N/A) e **Enviar para aprovação**.
+5. Como **Supervisor**, **Aprovar** ou **Reprovar**.
+6. Use o botão de **Tema** para alternar claro/escuro; confira responsividade no mobile.
 
 ---
 
 ## Cenários de teste (recomendados)
 
-> Cada cenário tem passos via **UI** (recomendado) e **cURL opcional**. Na UI, use o seletor **Perfil** (canto superior) para alternar entre **Executor 1**, **Executor 2** e **Supervisor**. Nos exemplos de `curl`, **use aspas simples** no corpo (`-d '...'`).
+> Cada cenário tem passos via **UI** (recomendado) e **cURL opcional**. Na UI, use o seletor **Perfil** (canto superior) para alternar entre **Executor 1**, **Executor 2** e **Supervisor**. **Nos exemplos de cURL use aspas simples** no corpo (`-d '...'`) para evitar erros de shell.
 
 ### 1) Exclusividade — **1 execução ativa por Veículo + Data**
 
@@ -242,7 +260,7 @@ curl -i -X POST http://localhost:5095/api/checklists/executions/<EXEC_ID>/approv
 
 1. Como **Executor 1**, clique **Iniciar**.
 2. Troque o Perfil para **Executor 2** e tente **Iniciar** a mesma execução.\
-   **Esperado:** `409` com mensagem _Já iniciado por outro executor._
+   **Esperado:** `409` com mensagem _Já iniciado por outro executor_.
 
 **cURL**
 
@@ -304,17 +322,17 @@ GET  /api/checklists/vehicles
 GET  /api/checklists/templates
 GET  /api/checklists/templates/{templateId}/items
 
-POST /api/checklists/executions                            { templateId, vehicleId, referenceDate }
+POST /api/checklists/executions                               { templateId, vehicleId, referenceDate }
 GET  /api/checklists/executions/active?vehicleId=&date=
 GET  /api/checklists/executions/{id}
-POST /api/checklists/executions/{id}/start                 { executorId }
-PATCH /api/checklists/executions/{id}/items/{templateItemId} { status, observation, rowVersion }
-POST /api/checklists/executions/{id}/submit                { rowVersion }
-POST /api/checklists/executions/{id}/approve               { decision, notes, rowVersion }
+POST /api/checklists/executions/{id}/start                    { executorId }
+PATCH /api/checklists/executions/{id}/items/{templateItemId}  { status, observation, rowVersion }
+POST /api/checklists/executions/{id}/submit                   { rowVersion }
+POST /api/checklists/executions/{id}/approve                  { decision, notes, rowVersion }
 GET  /api/checklists/users
 ```
 
-> **Cabeçalhos de papel (quando fizer cURL):** inclua `X-User-Id` e `X-User-Role` (Executor/Supervisor). Na UI isso é automático pelo seletor de Perfil.
+> **Cabeçalhos de papel (para cURL):** inclua `X-User-Id` e `X-User-Role` (Executor/Supervisor). Na UI isso é automático pelo seletor de Perfil.
 
 ---
 
@@ -323,14 +341,28 @@ GET  /api/checklists/users
 - Exclusividade `(VehicleId, ReferenceDate)` enquanto `Status ∈ {Draft, InProgress}`.
 - Regras de obrigatoriedade (não enviar com N/A obrigatório).
 - Concorrência otimista: `409` dispara **recarregar** no front.
-- Aprovação registra trilha em `Approvals`.
+- Aprovação registra trilha em `Approvals` (1 decisão por execução).
 - UX consistente em dark/light e mobile‑first.
 
 ---
 
 ## 🧹 Reset / limpeza rápida
 
-**Zerar execuções do dia para um veículo (SQL):**
+**Opção A — via Make (recomendado)**
+
+```bash
+make reset   # para containers e remove volumes (zera o banco)
+make first   # sobe novamente aplicando migrations + seed idempotente
+```
+
+**Opção B — via Docker Compose**
+
+```bash
+docker compose down -v          # para e remove volumes
+docker compose up -d --build    # sobe novamente
+```
+
+**Opção C — SQL “na unha” (apagar execuções do dia)**
 
 ```sql
 DELETE FROM Approvals WHERE ExecutionId IN (
@@ -342,19 +374,11 @@ DELETE FROM ExecutionItems WHERE ExecutionId IN (
 DELETE FROM Executions WHERE VehicleId = '<VEH_ID>' AND ReferenceDate = '2025-08-29';
 ```
 
-**Recriar container do SQL Server:**
-
-```bash
-docker rm -f sql2022 && \
-  docker run -e 'ACCEPT_EULA=Y' -e 'MSSQL_SA_PASSWORD=YourStrong!Passw0rd' \
-  -p 1433:1433 --name sql2022 -d --platform linux/amd64 \
-  mcr.microsoft.com/mssql/server:2022-latest
-```
-
 ---
 
 ## 📌 Observações finais
 
 - Em duplicidade (índice único), a UI tenta **carregar** a execução existente automaticamente.
 - Exemplos usam GUIDs/datas fixas para facilitar replays; ajuste conforme necessário.
-- Para auditoria, acompanhe logs do Kestrel e toasts da UI.
+- Para auditoria e troubleshooting, veja `make logs` (api/ui) — os logs do SQL continuam acessíveis no container do banco.
+- **Dica:** em cURL, mantenha **aspas simples** no `-d '...'` para não quebrar `!` e caracteres especiais no shell.
