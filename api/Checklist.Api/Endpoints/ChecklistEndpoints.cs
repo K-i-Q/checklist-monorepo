@@ -166,6 +166,9 @@ public static class ChecklistEndpoints
             try { ExecutionGuard.EnsureExecutor(userId, exec); }
             catch (Exception ex) { return Results.Problem(ex.Message, statusCode: 403); }
 
+            if (exec.Status != ExecutionStatus.InProgress)
+                return Results.Conflict("Execução não está em edição (InProgress).");
+
             db.Entry(exec).Property(e => e.RowVersion).OriginalValue = req.RowVersion;
 
             var requiredTemplateItems = await db.TemplateItems
@@ -182,6 +185,7 @@ public static class ChecklistEndpoints
                 return Results.BadRequest("Existem itens obrigatórios marcados como N/A. Preencha antes de enviar.");
 
             exec.Status = ExecutionStatus.Submitted;
+            db.Entry(exec).Property(e => e.Status).IsModified = true;
 
             try
             {
@@ -219,19 +223,24 @@ public static class ChecklistEndpoints
         {
             var (userId, role) = GetUser(http);
             if (!string.Equals(role, "Supervisor", StringComparison.OrdinalIgnoreCase))
-                return Results.Problem(
-                    "Somente Supervisor pode aprovar/reprovar.",
-                    statusCode: 403
-                );
+                return Results.Problem("Somente Supervisor pode aprovar/reprovar.", statusCode: 403);
 
             var exec = await db.Executions.FirstOrDefaultAsync(e => e.Id == id);
             if (exec is null) return Results.NotFound();
+
+            if (exec.Status != ExecutionStatus.Submitted)
+                return Results.Conflict("Execução não está pendente de aprovação.");
+
+            var jaTemAprovacao = await db.Approvals.AnyAsync(a => a.ExecutionId == id);
+            if (jaTemAprovacao)
+                return Results.Conflict("Execução já possui decisão registrada.");
 
             db.Entry(exec).Property(e => e.RowVersion).OriginalValue = req.RowVersion;
 
             exec.Status = req.Decision == ApprovalDecision.Approve
                 ? ExecutionStatus.Approved
                 : ExecutionStatus.Rejected;
+            db.Entry(exec).Property(e => e.Status).IsModified = true;
 
             db.Approvals.Add(new Approval
             {
@@ -245,13 +254,12 @@ public static class ChecklistEndpoints
             try
             {
                 await db.SaveChangesAsync();
+                return Results.Ok();
             }
             catch (DbUpdateConcurrencyException)
             {
                 return Results.Conflict("Versão desatualizada. Recarregue os dados.");
             }
-
-            return Results.Ok();
         });
 
         grp.MapGet("/executions/{id:guid}", async (Guid id, ChecklistDbContext db) =>
