@@ -28,3 +28,6 @@ reset:
 
 first:
 	@$(MAKE) reset && $(MAKE) up && $(MAKE) logs
+
+test:
+	dotnet test api/Checklist.Api.Tests/Checklist.Api.Tests.csproj

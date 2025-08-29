@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore & Build (API)
+        run: |
+          dotnet restore ./api/Checklist.Api/Checklist.Api.csproj
+          dotnet restore ./api/Checklist.Api.Tests/Checklist.Api.Tests.csproj
+          dotnet build ./api/Checklist.Api.Tests/Checklist.Api.Tests.csproj -c Release --no-restore
+
+      - name: Test (API)
+        run: dotnet test ./api/Checklist.Api.Tests/Checklist.Api.Tests.csproj -c Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory ./artifacts/tests
+
+      - name: Setup Node (UI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build UI (Angular)
+        working-directory: ./ui
+        run: |
+          npm ci
+          npm run build --if-present

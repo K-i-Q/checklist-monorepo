@@ -259,20 +259,36 @@ curl -i -X POST http://localhost:5095/api/checklists/executions/<EXEC_ID>/approv
 
 ### 5) **Lock do executor** ao iniciar
 
-**Objetivo:** execução iniciada por um executor não pode ser retomada por outro.
+**Objetivo:** execução iniciada por um executor **não pode** ser retomada **nem editada** por outro.
 
-**UI**
+**Como funciona (UI):**
+
+- Quando **Executor 1** clica **Iniciar**, a API grava `ExecutorId`/`StartedAt` e muda o status para **InProgress**.
+- Se **Executor 2** abrir a mesma execução (ex.: por _fallback_ ao tentar criar), a UI **carrega a execução existente** já **InProgress** e o botão **Iniciar** fica oculto/desabilitado. Isso é **esperado**.
+- Se o **Executor 2** tentar **editar itens**, a API responde **403** (_Já iniciado por outro executor_) e a UI mostra o erro sem salvar.
+- Se o **Executor 2** tentar **iniciar** via API, recebe **409** (_Já iniciado por outro executor_).
+
+**Passos (UI):**
 
 1. Como **Executor 1**, clique **Iniciar**.
-2. Troque o Perfil para **Executor 2** e tente **Iniciar** a mesma execução.\
-   **Esperado:** `409` com mensagem _Já iniciado por outro executor._
+2. Troque o Perfil para **Executor 2** e abra a mesma execução (via _fallback_ ou pelo ID).
+   - **Esperado:** sem botão **Iniciar**; ao tentar **OK/NOK/N/A** em qualquer item, ver **403** com mensagem _Já iniciado por outro executor_.
 
 **cURL**
 
 ```bash
+# tentar iniciar com outro executor (409)
 curl -i -X POST http://localhost:5095/api/checklists/executions/<EXEC_ID>/start \
   -H 'Content-Type: application/json' \
   -d '{"executorId":"33333333-3333-3333-3333-333333333333"}'
+
+# tentar editar item com outro executor (403)
+curl -i -X PATCH \
+  http://localhost:5095/api/checklists/executions/<EXEC_ID>/items/<TEMPLATE_ITEM_ID> \
+  -H 'Content-Type: application/json' \
+  -H 'X-User-Id: 33333333-3333-3333-3333-333333333333' \
+  -H 'X-User-Role: Executor' \
+  -d '{"status":1, "observation":"teste", "rowVersion":"<ROWVERSION_ATUAL>"}'
 ```
 
 ---
