@@ -1,5 +1,7 @@
 # Checklist (Back + Front) — Quickstart com Make/Compose + Seed
 
+[![CI](https://github.com/K-i-Q/checklist-monorepo/actions/workflows/ci.yml/badge.svg)](https://github.com/K-i-Q/checklist-monorepo/actions/workflows/ci.yml)
+
 Guia **objetivo** para rodar localmente (API .NET + UI Angular) em monorepo, agora com **Docker Compose** e **Makefile**. A **primeira subida** aplica migrations e faz **seed idempotente** (cria usuários + 1 veículo + 1 template com 3 itens).
 
 ## Stack
